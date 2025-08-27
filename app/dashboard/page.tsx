@@ -19,7 +19,11 @@ import {
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
+<<<<<<< HEAD
 interface StoredFile {
+=======
+interface File {
+>>>>>>> 5bf4f332082fa7a0c2c3c4d5e340d6a1a6169b51
   id: string
   filename: string
   originalName: string
@@ -32,7 +36,11 @@ interface StoredFile {
 
 export default function DashboardPage() {
   const router = useRouter()
+<<<<<<< HEAD
   const [files, setFiles] = useState<Array<Partial<StoredFile>>>([])
+=======
+  const [files, setFiles] = useState<File[]>([])
+>>>>>>> 5bf4f332082fa7a0c2c3c4d5e340d6a1a6169b51
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [uploadingFiles, setUploadingFiles] = useState<Array<{file: File, progress: number, status: 'uploading' | 'success' | 'error'}>>([])
@@ -91,7 +99,11 @@ export default function DashboardPage() {
         }
         
         // Process files with more lenient validation
+<<<<<<< HEAD
         const processedFiles = data.files.map((file: Partial<StoredFile>) => ({
+=======
+        const processedFiles = data.files.map(file => ({
+>>>>>>> 5bf4f332082fa7a0c2c3c4d5e340d6a1a6169b51
           id: file?.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
           filename: file?.filename || 'unknown-file',
           originalName: file?.originalName || 'Unknown File',
@@ -129,7 +141,11 @@ export default function DashboardPage() {
     }
     
     // Add files to uploading state
+<<<<<<< HEAD
     const newUploadingFiles = Array.from(selectedFiles).map((file: File) => ({
+=======
+    const newUploadingFiles = Array.from(selectedFiles).map(file => ({
+>>>>>>> 5bf4f332082fa7a0c2c3c4d5e340d6a1a6169b51
       file,
       progress: 0,
       status: 'uploading' as const
@@ -195,7 +211,11 @@ export default function DashboardPage() {
     }
 
     // Add files to uploading state
+<<<<<<< HEAD
     const newUploadingFiles = validFiles.map((file: File) => ({
+=======
+    const newUploadingFiles = validFiles.map(file => ({
+>>>>>>> 5bf4f332082fa7a0c2c3c4d5e340d6a1a6169b51
       file,
       progress: 0,
       status: 'uploading' as const
