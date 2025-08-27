@@ -91,7 +91,7 @@ export default function DashboardPage() {
         }
         
         // Process files with more lenient validation
-        const processedFiles = data.files.map(file => ({
+        const processedFiles = data.files.map((file: any) => ({
           id: file?.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
           filename: file?.filename || 'unknown-file',
           originalName: file?.originalName || 'Unknown File',
