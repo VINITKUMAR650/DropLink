@@ -94,7 +94,8 @@ export async function POST(request: NextRequest) {
       await writeFile(filePath, buffer)
     } catch (writeError) {
       console.error('Error writing file to disk:', writeError)
-      throw new Error(`Failed to save file: ${writeError.message}`)
+      const errorMessage = writeError instanceof Error ? writeError.message : 'Unknown write error'
+      throw new Error(`Failed to save file: ${errorMessage}`)
     }
 
     // Save file info to database
@@ -136,7 +137,8 @@ export async function POST(request: NextRequest) {
       })
     } catch (dbError) {
       console.error('Database error:', dbError);
-      throw new Error(`Database error: ${dbError.message}`);
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error'
+      throw new Error(`Database error: ${errorMessage}`);
     }
 
     return NextResponse.json({
