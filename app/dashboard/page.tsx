@@ -19,7 +19,7 @@ import {
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
-interface File {
+interface StoredFile {
   id: string
   filename: string
   originalName: string
@@ -32,7 +32,7 @@ interface File {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [files, setFiles] = useState<File[]>([])
+  const [files, setFiles] = useState<Array<Partial<StoredFile>>>([])
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [uploadingFiles, setUploadingFiles] = useState<Array<{file: File, progress: number, status: 'uploading' | 'success' | 'error'}>>([])
@@ -91,7 +91,7 @@ export default function DashboardPage() {
         }
         
         // Process files with more lenient validation
-        const processedFiles = data.files.map((file: any) => ({
+        const processedFiles = data.files.map((file: Partial<StoredFile>) => ({
           id: file?.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
           filename: file?.filename || 'unknown-file',
           originalName: file?.originalName || 'Unknown File',
@@ -129,7 +129,7 @@ export default function DashboardPage() {
     }
     
     // Add files to uploading state
-    const newUploadingFiles = Array.from(selectedFiles).map(file => ({
+    const newUploadingFiles = Array.from(selectedFiles).map((file: File) => ({
       file,
       progress: 0,
       status: 'uploading' as const
@@ -195,7 +195,7 @@ export default function DashboardPage() {
     }
 
     // Add files to uploading state
-    const newUploadingFiles = validFiles.map(file => ({
+    const newUploadingFiles = validFiles.map((file: File) => ({
       file,
       progress: 0,
       status: 'uploading' as const
