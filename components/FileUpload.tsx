@@ -1,13 +1,17 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { useDropzone } from 'react-dropzone'
-import { Button } from '@/components/ui/Button'
-import { Card } from '@/components/ui/Card'
-import { Upload, X, CheckCircle, AlertCircle, LogIn } from 'lucide-react'
-import { formatFileSize, isValidFileType, getFileIcon } from '@/lib/utils'
-import toast from 'react-hot-toast'
+'use client'
+
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useDropzone } from 'react-dropzone';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Upload, X, CheckCircle, AlertCircle, LogIn } from 'lucide-react';
+import { formatFileSize, isValidFileType, getFileIcon } from '@/lib/utils';
+import { createLoginUrl } from '@/lib/redirectUtils';
+import toast from 'react-hot-toast';
+import { supabase } from '@/lib/supabaseClient';
 
 interface FileWithProgress {
   file: File
@@ -23,33 +27,53 @@ export function FileUpload() {
   const [isUploading, setIsUploading] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
+  // Check if storage bucket is accessible
+  useEffect(() => {
+    const checkStorage = async () => {
+      try {
+        const { data, error } = await supabase.storage.from('uploads').list();
+        if (error) {
+          console.error('Storage bucket error:', error);
+          toast.error('Storage system is not accessible');
+        } else {
+          console.log('Storage bucket is accessible', data);
+        }
+      } catch (error) {
+        console.error('Storage check failed:', error);
+      }
+    };
+    checkStorage();
+  }, []);
+
   // Check authentication status
   useEffect(() => {
-    const checkAuthStatus = () => {
-      const user = localStorage.getItem('user')
-      setIsLoggedIn(!!user)
-    }
-    
-    checkAuthStatus()
-    
-    // Listen for auth changes
-    window.addEventListener('storage', checkAuthStatus)
-    return () => window.removeEventListener('storage', checkAuthStatus)
-  }, [])
+    // Check Supabase auth
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getUser();
+      setIsLoggedIn(!!data?.user);
+    };
+    checkAuth();
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      checkAuth();
+    });
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
 
   const handleUploadClick = () => {
     if (!isLoggedIn) {
-      toast.error('Please log in to upload files')
-      router.push('/login')
-      return
+      toast.error('Please log in to upload files');
+      router.push(createLoginUrl());
+      return;
     }
   }
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (!isLoggedIn) {
-      toast.error('Please log in to upload files')
-      router.push('/login')
-      return
+      toast.error('Please log in to upload files');
+      router.push(createLoginUrl());
+      return;
     }
 
     const newFiles = acceptedFiles.map(file => ({
@@ -82,77 +106,73 @@ export function FileUpload() {
   })
 
   const uploadFiles = async (filesToUpload: FileWithProgress[]) => {
-    setIsUploading(true)
-    
-    // Get user data from localStorage
-    const userData = localStorage.getItem('user')
-    if (!userData) {
-      toast.error('Please log in to upload files')
-      router.push('/login')
-      setIsUploading(false)
-      return
+    setIsUploading(true);
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData?.user) {
+      toast.error('Please log in to upload files');
+      router.push(createLoginUrl());
+      setIsUploading(false);
+      return;
     }
 
-    const user = JSON.parse(userData)
-    
     for (const fileWithProgress of filesToUpload) {
       try {
         if (!isValidFileType(fileWithProgress.file)) {
-          throw new Error('File type not supported')
+          throw new Error('File type not supported');
         }
+        // Upload to Supabase Storage (bucket: uploads)
+        const filePath = `${userData.user.id}/${Date.now()}_${fileWithProgress.file.name}`;
+        console.log('Attempting to upload file:', {
+          name: fileWithProgress.file.name,
+          size: fileWithProgress.file.size,
+          type: fileWithProgress.file.type,
+          path: filePath
+        });
 
-        const formData = new FormData()
-        formData.append('file', fileWithProgress.file)
-
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          headers: {
-            'x-user-id': user.id, // Send user ID in headers
-          },
-          body: formData,
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Upload failed')
-        }
-
-        const result = await response.json()
+        const { error } = await supabase.storage.from('uploads').upload(filePath, fileWithProgress.file);
         
-        setFiles(prev => prev.map(f => 
-          f.file === fileWithProgress.file 
-            ? { ...f, status: 'success', shareId: result.shareId, progress: 100 }
-            : f
-        ))
+        if (error) {
+          console.error('Supabase upload error:', error);
+          throw error;
+        }
 
-        toast.success(`${fileWithProgress.file.name} uploaded successfully!`)
+        console.log('File uploaded successfully:', filePath);
+        
+        setFiles(prev => prev.map(f =>
+          f.file === fileWithProgress.file
+            ? { ...f, status: 'success', shareId: filePath, progress: 100 }
+            : f
+        ));
+        toast.success(`${fileWithProgress.file.name} uploaded successfully!`);
       } catch (error) {
-        setFiles(prev => prev.map(f => 
-          f.file === fileWithProgress.file 
+        console.error('Upload error:', error);
+        setFiles(prev => prev.map(f =>
+          f.file === fileWithProgress.file
             ? { ...f, status: 'error', error: error instanceof Error ? error.message : 'Upload failed', progress: 0 }
             : f
-        ))
-        
-        toast.error(`Failed to upload ${fileWithProgress.file.name}`)
+        ));
+        toast.error(`Failed to upload ${fileWithProgress.file.name}`);
       }
     }
-    
-    setIsUploading(false)
-  }
+    setIsUploading(false);
+  };
 
   const removeFile = (fileToRemove: File) => {
     setFiles(prev => prev.filter(f => f.file !== fileToRemove))
   }
 
   const copyShareLink = async (shareId: string) => {
-    const link = `${window.location.origin}/download/${shareId}`
+    // Generate a public URL for the file in Supabase Storage
+    const { data } = supabase.storage.from('uploads').getPublicUrl(shareId);
+    const link = data?.publicUrl || `${window.location.origin}/download/${shareId}`;
     try {
-      await navigator.clipboard.writeText(link)
-      toast.success('Share link copied to clipboard!')
+      await navigator.clipboard.writeText(link);
+      toast.success('Share link copied to clipboard!');
     } catch (error) {
-      toast.error('Failed to copy link')
+      toast.error('Failed to copy link');
     }
-  }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6">
@@ -161,20 +181,38 @@ export function FileUpload() {
         {isLoggedIn ? (
           <div
             {...getRootProps()}
-            className={`border-2 border-dashed rounded-lg p-4 sm:p-6 md:p-8 text-center transition-colors duration-200 cursor-pointer ${
+            className={`border-2 border-dashed rounded-lg p-4 sm:p-6 md:p-8 text-center transition-all duration-200 cursor-pointer relative overflow-hidden ${
               isDragActive
-                ? 'border-primary-500 bg-primary-50'
-                : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50'
+                ? 'border-primary-500 bg-primary-50 shadow-lg scale-[1.02] border-primary-400'
+                : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50 hover:shadow-md'
             }`}
           >
             <input {...getInputProps()} />
+            {isDragActive && (
+              <div className="absolute inset-0 bg-primary-100/80 border-2 border-primary-500 rounded-lg flex items-center justify-center z-10">
+                <div className="text-center">
+                  <Upload className="mx-auto h-12 w-12 text-primary-600 mb-2 animate-bounce" />
+                  <p className="text-lg font-semibold text-primary-700">Drop files to upload</p>
+                </div>
+              </div>
+            )}
             <Upload className="mx-auto h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 text-gray-400 mb-3 sm:mb-4" />
             <p className="text-base sm:text-lg font-medium text-gray-900 mb-2">
-              {isDragActive ? 'Drop files here' : 'Drag & drop files here'}
+              {isDragActive ? 'Drop files here' : 'Upload Your Files'}
             </p>
             <p className="text-sm sm:text-base text-gray-500 mb-3 sm:mb-4">
-              or click to select files
+              {isDragActive ? 'Release to upload' : 'Drag & drop files here or click to browse'}
             </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+              <Button 
+                type="button"
+                className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Choose Files
+              </Button>
+              <span className="text-gray-400 text-sm">or</span>
+              <span className="text-gray-600 text-sm font-medium">Drag files here</span>
+            </div>
             <p className="text-xs sm:text-sm text-gray-400 px-2">
               Max file size: 1GB • Supported formats: Images, Videos, Audio, Documents, Archives
             </p>

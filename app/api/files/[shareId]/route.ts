@@ -1,74 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { unlink } from 'fs/promises'
-import { existsSync } from 'fs'
-import { prisma } from '@/lib/db'
+import { supabase } from '@/lib/supabaseClient'
 
-export async function DELETE(
+export async function GET(
   request: NextRequest,
   { params }: { params: { shareId: string } }
 ) {
   try {
-    const { shareId } = params
+    const shareId = params.shareId
 
-    // Get user ID from request headers for authentication
-    const userId = request.headers.get('x-user-id')
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
+    // Get file metadata from database
+    const { data: file, error: fileError } = await supabase
+      .from('files')
+      .select('*')
+      .eq('share_id', shareId)
+      .single();
 
-    // Find the file and verify ownership
-    const file = await prisma.file.findUnique({
-      where: { shareId },
-      select: {
-        id: true,
-        path: true,
-        userId: true
-      }
-    })
+    if (fileError && fileError.code !== 'PGRST116') throw fileError;
 
     if (!file) {
-      return NextResponse.json(
-        { error: 'File not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'File not found' }, { status: 404 })
     }
 
-    // Check if user owns this file
-    if (file.userId !== userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized to delete this file' },
-        { status: 403 }
-      )
+    // Check if file is expired
+    if (file.expires_at && new Date(file.expires_at) < new Date()) {
+      return NextResponse.json({ error: 'File has expired' }, { status: 410 })
     }
 
-    // Delete the physical file if it exists
-    if (existsSync(file.path)) {
-      try {
-        await unlink(file.path)
-      } catch (error) {
-        console.error('Error deleting physical file:', error)
-        // Continue with database deletion even if physical file deletion fails
-      }
-    }
+    // Get user info
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', file.user_id)
+      .single();
 
-    // Delete the database record
-    await prisma.file.delete({
-      where: { id: file.id }
-    })
+    if (userError && userError.code !== 'PGRST116') throw userError;
 
+    // Return file info (without sensitive data)
     return NextResponse.json({
-      success: true,
-      message: 'File deleted successfully'
+      id: file.id,
+      filename: file.filename,
+      originalName: file.original_name,
+      size: file.size,
+      mimeType: file.mime_type,
+      shareId: file.share_id,
+      hasPassword: !!file.password,
+      expiresAt: file.expires_at,
+      downloadCount: file.download_count,
+      createdAt: file.created_at,
+      user: user ? {
+        name: user.name,
+        email: user.email
+      } : null
     })
 
   } catch (error) {
-    console.error('Delete error:', error)
+    console.error('File info API error:', error)
     return NextResponse.json(
-      { error: 'Failed to delete file' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

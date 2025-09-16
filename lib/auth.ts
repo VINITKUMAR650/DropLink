@@ -2,63 +2,62 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from './supabaseClient'
+import { createLoginUrl, redirectToReturnUrl } from './redirectUtils'
 
 export function useAuth() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    const checkAuthStatus = () => {
-      const userData = localStorage.getItem('user')
-      if (userData) {
-        try {
-          const user = JSON.parse(userData)
-          setIsLoggedIn(true)
-          setUser(user)
-        } catch (error) {
-          console.error('Error parsing user data:', error)
-          localStorage.removeItem('user')
-          setIsLoggedIn(false)
-          setUser(null)
-        }
+    const getSession = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        setIsLoggedIn(true);
+        setUser(data.user);
       } else {
-        setIsLoggedIn(false)
-        setUser(null)
+        setIsLoggedIn(false);
+        setUser(null);
       }
-      setLoading(false)
+      setLoading(false);
+    };
+    getSession();
+    // Listen for auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      getSession();
+    });
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setIsLoggedIn(false);
+    setUser(null);
+    router.push('/');
+  };
+
+  const requireAuth = (redirectUrl?: string) => {
+    if (!isLoggedIn && !loading) {
+      const loginUrl = createLoginUrl(redirectUrl);
+      router.push(loginUrl);
+      return false;
     }
+    return isLoggedIn;
+  };
 
-    checkAuthStatus()
-    
-    // Listen for auth changes
-    window.addEventListener('storage', checkAuthStatus)
-    return () => window.removeEventListener('storage', checkAuthStatus)
-  }, [])
-
-  const logout = () => {
-    localStorage.removeItem('user')
-    setIsLoggedIn(false)
-    setUser(null)
-    router.push('/')
-  }
-
-  return { isLoggedIn, user, loading, logout }
+  return { isLoggedIn, user, loading, logout, requireAuth };
 }
 
-export function redirectIfAuthenticated() {
+export async function redirectIfAuthenticated() {
   if (typeof window !== 'undefined') {
-    const userData = localStorage.getItem('user')
-    if (userData) {
-      try {
-        JSON.parse(userData)
-        return true // User is authenticated
-      } catch (error) {
-        localStorage.removeItem('user')
-        return false
-      }
+    const { data } = await supabase.auth.getUser();
+    if (data?.user) {
+      return true;
     }
   }
-  return false
+  return false;
 }

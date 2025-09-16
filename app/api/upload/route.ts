@@ -1,105 +1,173 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { existsSync } from 'fs'
-import { prisma } from '@/lib/db'
-import { generateShareId, isValidFileType } from '@/lib/utils'
-
-
-const MAX_FILE_SIZE = 1024 * 1024 * 1024 // 1GB
-const UPLOAD_DIR = './uploads'
+import { supabase } from '@/lib/supabaseClient'
 
 export async function POST(request: NextRequest) {
   try {
-    // Get user ID from request headers (sent from frontend)
-    const userId = request.headers.get('x-user-id')
+    console.log('Upload API: Starting upload process');
     
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
+    // Get user from Supabase auth
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.log('Upload API: No authorization header');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify user exists in database
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 401 }
-      )
+    const token = authHeader.substring(7)
+    console.log('Upload API: Checking user authentication');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    
+    if (authError || !user) {
+      console.log('Upload API: Authentication failed:', authError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    console.log('Upload API: User authenticated:', user.id);
 
     const formData = await request.formData()
     const file = formData.get('file') as File
-    
+    const password = formData.get('password') as string
+    const expiresAt = formData.get('expiresAt') as string
+
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 }
-      )
+      console.log('Upload API: No file provided');
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: 'File size exceeds maximum limit of 1GB' },
-        { status: 400 }
-      )
+    console.log('Upload API: File received:', file.name, file.size);
+
+    // Generate unique file path and share ID
+    const timestamp = Date.now()
+    const shareId = Math.random().toString(36).substring(2, 15)
+    const filePath = `${user.id}/${timestamp}_${file.name}`
+
+    console.log('Upload API: Uploading to storage:', filePath);
+
+    // Upload file to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('uploads')
+      .upload(filePath, file)
+
+    if (uploadError) {
+      console.error('Upload API: Storage upload error:', uploadError)
+      return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 })
     }
 
-    // Validate file type
-    if (!isValidFileType(file)) {
-      return NextResponse.json(
-        { error: 'File type not supported' },
-        { status: 400 }
-      )
+    console.log('Upload API: Storage upload successful');
+
+    // Get file URL
+    const { data: urlData } = supabase.storage
+      .from('uploads')
+      .getPublicUrl(filePath)
+
+    console.log('Upload API: Got public URL:', urlData.publicUrl);
+
+    // Check if user exists in database first
+    console.log('Upload API: Checking if user exists in database');
+    
+    // Create admin client for database operations
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+    
+    let dbUser;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Upload API: Error checking user:', error);
+        throw error;
+      }
+
+      if (data) {
+        dbUser = data;
+        console.log('Upload API: Found existing user:', dbUser.id);
+      } else {
+        console.log('Upload API: User not found, creating user profile');
+        const { data: newUserData, error: createError } = await supabaseAdmin
+          .from('users')
+          .insert([{
+            id: user.id,
+            email: user.email || '',
+            name: user.user_metadata?.name || user.user_metadata?.full_name || null
+          }])
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Upload API: Error creating user:', createError);
+          throw createError;
+        }
+        dbUser = newUserData;
+        console.log('Upload API: Created new user:', dbUser.id);
+      }
+    } catch (userError) {
+      console.error('Upload API: User database operation failed:', userError);
+      return NextResponse.json({ 
+        error: 'User database error', 
+        details: userError instanceof Error ? userError.message : 'Unknown user error' 
+      }, { status: 500 });
     }
 
-    // Create upload directory if it doesn't exist
-    if (!existsSync(UPLOAD_DIR)) {
-      await mkdir(UPLOAD_DIR, { recursive: true })
-    }
+    console.log('Upload API: User exists in database:', dbUser.id);
 
-    // Generate unique filename and share ID
-    const shareId = generateShareId()
-    const fileExtension = file.name.split('.').pop()
-    const filename = `${shareId}.${fileExtension}`
-    const filePath = join(UPLOAD_DIR, filename)
-
-    // Convert file to buffer and save
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    await writeFile(filePath, buffer)
-
-    // Save file info to database
-    const fileRecord = await prisma.file.create({
-      data: {
-        filename,
-        originalName: file.name,
+    // Save file metadata to database
+    console.log('Upload API: Saving file metadata to database');
+    const { data: dbFile, error: fileError } = await supabaseAdmin
+      .from('files')
+      .insert([{
+        filename: file.name,
+        original_name: file.name,
         size: file.size,
-        mimeType: file.type,
+        mime_type: file.type,
         path: filePath,
-        shareId,
-        userId: userId, // Use the authenticated user's ID
-      },
-    })
+        share_id: shareId,
+        password: password || undefined,
+        expires_at: expiresAt || undefined,
+        user_id: user.id
+      }])
+      .select()
+      .single();
+
+    if (fileError) {
+      console.error('Upload API: File database error:', fileError);
+      return NextResponse.json({ 
+        error: 'File database error', 
+        details: fileError.message || 'Unknown file error' 
+      }, { status: 500 });
+    }
+
+    console.log('Upload API: File saved to database:', dbFile.id);
 
     return NextResponse.json({
       success: true,
-      shareId: fileRecord.shareId,
-      filename: fileRecord.originalName,
-      size: fileRecord.size,
-      downloadUrl: `/download/${shareId}`,
+      file: {
+        id: dbFile.id,
+        shareId,
+        url: urlData.publicUrl,
+        downloadUrl: `/download/${shareId}`,
+        filename: file.name,
+        size: file.size,
+        mimeType: file.type,
+        path: filePath // Include the actual storage path
+      }
     })
 
   } catch (error) {
-    console.error('Upload error:', error)
+    console.error('Upload API: Unexpected error:', error)
     return NextResponse.json(
-      { error: 'Failed to upload file' },
+      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

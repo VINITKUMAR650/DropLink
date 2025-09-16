@@ -1,6 +1,6 @@
 # DropLink - Universal File Sharing Platform
 
-A modern, scalable file sharing SaaS platform built with Next.js, TypeScript, and Prisma. Share files instantly with unique links - no signup required for downloads.
+A modern, scalable file sharing SaaS platform built with Next.js, TypeScript, and Supabase. Share files instantly with unique links - no signup required for downloads.
 
 ## 🚀 Features
 
@@ -29,9 +29,9 @@ A modern, scalable file sharing SaaS platform built with Next.js, TypeScript, an
 
 - **Frontend**: Next.js 14, React 18, TypeScript
 - **Styling**: Tailwind CSS, Headless UI
-- **Database**: SQLite with Prisma ORM
-- **Authentication**: Custom auth with bcrypt
-- **File Handling**: Node.js file system with multer
+- **Database**: PostgreSQL with Supabase
+- **Authentication**: Supabase Auth
+- **File Storage**: Supabase Storage
 - **Icons**: Lucide React, Heroicons
 - **Notifications**: React Hot Toast
 
@@ -57,38 +57,23 @@ A modern, scalable file sharing SaaS platform built with Next.js, TypeScript, an
 3. **Set up environment variables**
    Create a `.env.local` file in the root directory:
    ```env
-   # Database
-   DATABASE_URL="file:./dev.db"
-   
-   # NextAuth
-   NEXTAUTH_URL="http://localhost:3000"
-   NEXTAUTH_SECRET="your-secret-key-here-change-in-production"
-   
-   # File Upload
-   MAX_FILE_SIZE=1073741824
-   UPLOAD_DIR="./uploads"
-   
-   # App Configuration
-   NEXT_PUBLIC_APP_URL="http://localhost:3000"
+   # Supabase Configuration
+   NEXT_PUBLIC_SUPABASE_URL="your-supabase-url"
+   NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
+   SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
    ```
 
-4. **Set up the database**
-   ```bash
-   npx prisma generate
-   npx prisma db push
-   ```
+4. **Set up Supabase database**
+   - Go to your Supabase project dashboard
+   - Run the SQL schema from `supabase-schema.sql` in the SQL Editor
+   - Create a storage bucket named 'uploads' and make it public
 
-5. **Create uploads directory**
-   ```bash
-   mkdir uploads
-   ```
-
-6. **Run the development server**
+5. **Run the development server**
    ```bash
    npm run dev
    ```
 
-7. **Open your browser**
+6. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
 ## 🏗️ Project Structure
@@ -97,11 +82,12 @@ A modern, scalable file sharing SaaS platform built with Next.js, TypeScript, an
 droplink/
 ├── app/                    # Next.js app directory
 │   ├── api/               # API routes
-│   │   ├── auth/          # Authentication endpoints
 │   │   ├── upload/        # File upload endpoint
-│   │   └── download/      # File download endpoint
+│   │   ├── download/      # File download endpoint
+│   │   └── files/         # File management endpoints
 │   ├── dashboard/         # User dashboard
 │   ├── download/          # File download pages
+│   ├── login/             # User login
 │   ├── register/          # User registration
 │   └── globals.css        # Global styles
 ├── components/            # React components
@@ -109,11 +95,10 @@ droplink/
 │   ├── Header.tsx        # Navigation header
 │   └── FileUpload.tsx    # File upload component
 ├── lib/                  # Utility functions
-│   ├── db.ts            # Database connection
+│   ├── auth.ts          # Authentication utilities
+│   ├── supabaseClient.ts # Supabase client configuration
 │   └── utils.ts         # Helper functions
-├── prisma/              # Database schema
-│   └── schema.prisma    # Prisma schema
-└── uploads/             # File storage directory
+└── supabase-schema.sql   # Database schema
 ```
 
 ## 🎯 Usage
@@ -138,14 +123,11 @@ Modify `MAX_FILE_SIZE` in `.env.local`:
 MAX_FILE_SIZE=2147483648  # 2GB
 ```
 
-### Supported File Types
-Edit the `isValidFileType` function in `lib/utils.ts` to add/remove file types.
-
 ### Database
-For production, switch to PostgreSQL:
-```env
-DATABASE_URL="postgresql://user:password@localhost:5432/droplink"
-```
+For production, ensure your Supabase project is properly configured with:
+- Proper RLS policies
+- Storage bucket permissions
+- Environment variables set correctly
 
 ## 🚀 Deployment
 
@@ -163,12 +145,12 @@ DATABASE_URL="postgresql://user:password@localhost:5432/droplink"
 
 ## 🔒 Security Considerations
 
-- Change `NEXTAUTH_SECRET` in production
+- Secure Supabase service role key (keep it secret!)
 - Use HTTPS in production
 - Implement rate limiting for uploads
 - Add file scanning for malware
-- Consider cloud storage (AWS S3, Cloudinary)
-- Implement proper user authentication
+- Review Supabase RLS policies regularly
+- Monitor storage usage and costs
 
 ## 🎨 Customization
 
@@ -185,16 +167,16 @@ DATABASE_URL="postgresql://user:password@localhost:5432/droplink"
 
 ## 📈 Future Roadmap
 
-- [ ] User authentication with NextAuth.js
 - [ ] QR code generation for share links
 - [ ] File preview (images, PDFs, videos)
 - [ ] Bulk file operations
 - [ ] API access for developers
 - [ ] Mobile app
-- [ ] Cloud storage integration
 - [ ] Advanced analytics
 - [ ] Team collaboration features
 - [ ] Custom branding for businesses
+- [ ] File versioning
+- [ ] Enhanced security features
 
 ## 🤝 Contributing
 
@@ -219,7 +201,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [Next.js](https://nextjs.org/)
 - Styled with [Tailwind CSS](https://tailwindcss.com/)
 - Icons from [Lucide React](https://lucide.dev/)
-- Database with [Prisma](https://www.prisma.io/)
+- Database with [Supabase](https://supabase.com/)
 
 ---
 
