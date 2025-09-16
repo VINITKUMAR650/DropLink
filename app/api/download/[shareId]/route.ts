@@ -45,7 +45,7 @@ export async function GET(
     // Increment download count
     try {
       const { error: incrementError } = await supabase
-        .rpc('increment_download_count', { share_id_param: shareId }); // Assuming 'share_id_param' is the correct argument name for your rpc function
+        .rpc('increment_download_count', { share_id: shareId });
       if (incrementError) {
         console.error('Download API: Error incrementing download count:', incrementError);
       }

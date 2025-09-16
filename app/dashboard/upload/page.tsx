@@ -101,35 +101,67 @@ export default function DashboardUploadPage() {
 
   const uploadFiles = async (filesToUpload: FileWithProgress[]) => {
     setIsUploading(true);
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
       toast.error('Please log in to upload files');
       router.push('/login');
       setIsUploading(false);
       return;
     }
+
     for (const fileWithProgress of filesToUpload) {
       try {
         if (!isValidFileType(fileWithProgress.file)) {
           throw new Error('File type not supported');
         }
-        // Upload to Supabase Storage (bucket: uploads)
-        const filePath = `${userData.user.id}/${Date.now()}_${fileWithProgress.file.name}`;
-        const { error } = await supabase.storage.from('uploads').upload(filePath, fileWithProgress.file);
-        if (error) throw error;
+
+        // Update progress
         setFiles(prev => prev.map(f =>
           f.file === fileWithProgress.file
-            ? { ...f, status: 'success', shareId: filePath, progress: 100 }
+            ? { ...f, progress: 25 }
+            : f
+        ));
+
+        // Create form data
+        const formData = new FormData();
+        formData.append('file', fileWithProgress.file);
+        
+        setFiles(prev => prev.map(f =>
+          f.file === fileWithProgress.file
+            ? { ...f, progress: 50 }
+            : f
+        ));
+        
+        // Upload via API
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.details || result.error || 'Upload failed');
+        }
+        
+        setFiles(prev => prev.map(f =>
+          f.file === fileWithProgress.file
+            ? { ...f, status: 'success', shareId: result.file.shareId, progress: 100 }
             : f
         ));
         toast.success(`${fileWithProgress.file.name} uploaded successfully!`);
       } catch (error) {
+        console.error('Upload error:', error);
         setFiles(prev => prev.map(f =>
           f.file === fileWithProgress.file
             ? { ...f, status: 'error', error: error instanceof Error ? error.message : 'Upload failed', progress: 0 }
             : f
         ));
-        toast.error(`Failed to upload ${fileWithProgress.file.name}`);
+        toast.error(`Failed to upload ${fileWithProgress.file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
     setIsUploading(false);
@@ -140,9 +172,7 @@ export default function DashboardUploadPage() {
   }
 
   const copyShareLink = async (shareId: string) => {
-    // Generate a public URL for the file in Supabase Storage
-    const { data } = supabase.storage.from('uploads').getPublicUrl(shareId);
-    const link = data?.publicUrl || `${window.location.origin}/download/${shareId}`;
+    const link = `${window.location.origin}/download/${shareId}`;
     try {
       await navigator.clipboard.writeText(link);
       toast.success('Share link copied to clipboard!');
