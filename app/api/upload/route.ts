@@ -5,6 +5,27 @@ export async function POST(request: NextRequest) {
   try {
     console.log('Upload API: Starting upload process');
     
+    // Environment validation
+    const requiredEnvVars = {
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
+    };
+    
+    const missingVars = Object.entries(requiredEnvVars)
+      .filter(([_, value]) => !value)
+      .map(([key, _]) => key);
+    
+    if (missingVars.length > 0) {
+      console.error('Upload API: Missing environment variables:', missingVars);
+      return NextResponse.json({ 
+        error: 'Server configuration error',
+        details: `Missing environment variables: ${missingVars.join(', ')}`,
+        missingVars
+      }, { status: 500 });
+    }
+    
+    console.log('Upload API: Environment variables validated');
+    
     // Get user from Supabase auth
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
@@ -42,14 +63,52 @@ export async function POST(request: NextRequest) {
 
     console.log('Upload API: Uploading to storage:', filePath);
 
+    // Test storage bucket accessibility first
+    try {
+      const { error: bucketError } = await supabase.storage.from('uploads').list('', { limit: 1 });
+      if (bucketError) {
+        console.error('Upload API: Storage bucket not accessible:', bucketError);
+        return NextResponse.json({ 
+          error: 'Storage system unavailable',
+          details: 'File storage bucket is not accessible. Please check storage configuration.'
+        }, { status: 503 });
+      }
+    } catch (bucketTestError) {
+      console.error('Upload API: Storage bucket test failed:', bucketTestError);
+      return NextResponse.json({ 
+        error: 'Storage system error',
+        details: 'Unable to access file storage system'
+      }, { status: 503 });
+    }
+
     // Upload file to Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from('uploads')
       .upload(filePath, file)
 
     if (uploadError) {
-      console.error('Upload API: Storage upload error:', uploadError)
-      return NextResponse.json({ error: 'Failed to upload file' }, { status: 500 })
+      console.error('Upload API: Storage upload error:', uploadError);
+      
+      // Handle specific error types
+      let errorMessage = 'Failed to upload file';
+      let statusCode = 500;
+      
+      if (uploadError.message?.includes('insufficient_privilege')) {
+        errorMessage = 'Storage permission error: Please check storage policies';
+        statusCode = 403;
+      } else if (uploadError.message?.includes('row-level security')) {
+        errorMessage = 'Storage access denied: Row Level Security policy violation';
+        statusCode = 403;
+      } else if (uploadError.message?.includes('file size')) {
+        errorMessage = 'File too large: Please reduce file size and try again';
+        statusCode = 413;
+      }
+      
+      return NextResponse.json({ 
+        error: errorMessage,
+        details: uploadError.message,
+        errorCode: statusCode
+      }, { status: statusCode });
     }
 
     console.log('Upload API: Storage upload successful');
@@ -66,6 +125,7 @@ export async function POST(request: NextRequest) {
     
     // Create admin client for database operations
     const { createClient } = await import('@supabase/supabase-js');
+    
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
