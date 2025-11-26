@@ -24,15 +24,37 @@ export default function LoginPage() {
   useEffect(() => {
     // Check if user is already logged in with Supabase
     const checkSession = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        // Check for return URL in query params or default to dashboard
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        console.log('Session check result:', { data, error });
+        if (error) {
+          console.error('Session check error:', error);
+        }
+        if (data?.user) {
+          // Check for return URL in query params or default to dashboard
+          const searchParams = new URLSearchParams(window.location.search);
+          const returnUrl = getReturnUrl(searchParams);
+          router.push(returnUrl);
+        }
+      } catch (err) {
+        console.error('Session check exception:', err);
+      }
+    };
+    checkSession();
+    
+    // Listen for auth state changes
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state change:', { event, session });
+      if (event === 'SIGNED_IN' && session?.user) {
         const searchParams = new URLSearchParams(window.location.search);
         const returnUrl = getReturnUrl(searchParams);
         router.push(returnUrl);
       }
+    });
+    
+    return () => {
+      listener?.subscription.unsubscribe();
     };
-    checkSession();
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {

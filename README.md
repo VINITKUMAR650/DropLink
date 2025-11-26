@@ -76,6 +76,10 @@ A modern, scalable file sharing SaaS platform built with Next.js, TypeScript, an
 6. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
+## ⚠️ Important Setup Note
+
+If you're getting "User database error" when uploading files, you need to set up a real Supabase project with proper credentials. Follow the detailed setup guide in [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) to get your application working correctly.
+
 ## 🏗️ Project Structure
 
 ```
@@ -206,4 +210,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **DropLink** - Share files instantly, securely, and beautifully. ✨
-

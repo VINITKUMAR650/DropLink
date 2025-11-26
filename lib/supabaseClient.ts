@@ -5,13 +5,13 @@ let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // Fallback to hardcoded values for testing if env vars aren't loading
 if (!supabaseUrl) {
-  supabaseUrl = 'https://lioqivtmcgsadzuyxlrf.supabase.co';
-  console.warn('Using fallback Supabase URL');
+  supabaseUrl = 'https://your-project-ref.supabase.co';
+  console.warn('Using fallback Supabase URL - please update .env.local with your actual Supabase URL');
 }
 
 if (!supabaseAnonKey) {
-  supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxpb3FpdnRtY2dzYWR6dXl4bHJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0MDYwMjgsImV4cCI6MjA3MTk4MjAyOH0.f5j0_Zhc_KkAupw0jfizeeaBNMyZtaYyQT_nhiF95MQ';
-  console.warn('Using fallback Supabase Anon Key');
+  supabaseAnonKey = 'your-anon-key-here';
+  console.warn('Using fallback Supabase Anon Key - please update .env.local with your actual Supabase Anon Key');
 }
 
 // Debug: Check if environment variables are loaded
@@ -19,8 +19,19 @@ console.log('Supabase URL:', supabaseUrl ? 'Loaded' : 'Missing');
 console.log('Supabase Anon Key:', supabaseAnonKey ? 'Loaded' : 'Missing');
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+  throw new Error('Missing Supabase environment variables - please check your .env.local file');
 }
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Create Supabase client with proper auth configuration
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Enable automatic token refreshing
+    autoRefreshToken: true,
+    // Persist session in localStorage
+    persistSession: true,
+    // Detect session changes
+    detectSessionInUrl: true
+  }
+});
+
 export { supabase };

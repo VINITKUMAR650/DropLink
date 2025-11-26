@@ -7,7 +7,7 @@ import { getReturnUrl } from '@/lib/redirectUtils'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Header } from '@/components/Header'
-import { Mail, Lock, User, ArrowLeft, Eye, EyeOff, CheckCircle, Shield } from 'lucide-react'
+import { ArrowLeft, Mail, Lock, Eye, EyeOff, User } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 
@@ -23,16 +23,23 @@ export default function RegisterPage() {
     confirmPassword: ''
   })
 
-  // Check if user is already logged in and handle return URL
+  // Check if user is already logged in
   useEffect(() => {
-    // Check if user is already logged in with Supabase
     const checkSession = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        // Check for return URL in query params or default to dashboard
-        const searchParams = new URLSearchParams(window.location.search);
-        const returnUrl = getReturnUrl(searchParams);
-        router.push(returnUrl);
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        console.log('Session check result:', { data, error });
+        if (error) {
+          console.error('Session check error:', error);
+        }
+        if (data?.user) {
+          // Check for return URL in query params or default to dashboard
+          const searchParams = new URLSearchParams(window.location.search);
+          const returnUrl = getReturnUrl(searchParams);
+          router.push(returnUrl);
+        }
+      } catch (err) {
+        console.error('Session check exception:', err);
       }
     };
     checkSession();
@@ -242,24 +249,25 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                {/* Password Requirements */}
-                {formData.password && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Password Requirements:</h4>
-                    <div className="space-y-1">
-                      {passwordRequirements.map((req, index) => (
-                        <div key={index} className="flex items-center text-sm">
-                          <CheckCircle 
-                            className={`h-4 w-4 mr-2 ${req.met ? 'text-green-500' : 'text-gray-300'}`} 
-                          />
-                          <span className={req.met ? 'text-green-700' : 'text-gray-500'}>
-                            {req.label}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Password Requirements</h4>
+                  <ul className="space-y-1">
+                    {passwordRequirements.map((req, index) => (
+                      <li key={index} className="flex items-center text-sm">
+                        {req.met ? (
+                          <svg className="h-4 w-4 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="h-4 w-4 text-gray-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        <span className={req.met ? 'text-green-600' : 'text-gray-500'}>{req.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
                 <Button
                   type="submit"
@@ -286,40 +294,24 @@ export default function RegisterPage() {
                   </Link>
                 </div>
               </div>
-
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="flex items-center justify-center text-xs text-gray-500">
-                  <Shield className="h-4 w-4 mr-2" />
-                  <span>
-                    By creating an account, you agree to our{' '}
-                    <Link href="/terms" className="text-emerald-600 hover:text-emerald-500">
-                      Terms of Service
-                    </Link>{' '}
-                    and{' '}
-                    <Link href="/privacy" className="text-emerald-600 hover:text-emerald-500">
-                      Privacy Policy
-                    </Link>
-                  </span>
-                </div>
-              </div>
             </div>
           </Card>
 
-          {/* Trust Indicators */}
+          {/* Features List */}
           <div className="text-center">
-            <p className="text-sm text-gray-500 mb-4">Join thousands of users who trust DropLink</p>
+            <p className="text-sm text-gray-500 mb-4">Join thousands of satisfied users</p>
             <div className="flex justify-center space-x-6 text-xs text-gray-400">
               <span className="flex items-center">
                 <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
-                Secure Storage
+                Secure File Sharing
               </span>
               <span className="flex items-center">
                 <div className="w-2 h-2 bg-blue-400 rounded-full mr-2"></div>
-                Free Plan Available
+                Instant Links
               </span>
               <span className="flex items-center">
                 <div className="w-2 h-2 bg-purple-400 rounded-full mr-2"></div>
-                No Credit Card
+                No Signup Required
               </span>
             </div>
           </div>
